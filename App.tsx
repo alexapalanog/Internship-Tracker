@@ -117,6 +117,7 @@ const App: React.FC = () => {
   const handleMouseDown = (date: Date) => {
     if (startDate && isBefore(startOfDay(date), startOfDay(startDate))) return;
     if (!startDate) return;
+    if (stats.estimatedEndDate && isAfter(startOfDay(date), startOfDay(stats.estimatedEndDate))) return;
     
     setIsDragging(true);
     setDragStart(date);
@@ -132,6 +133,7 @@ const App: React.FC = () => {
   const handleMouseEnter = (date: Date) => {
     if (!isDragging || !dragStart || !startDate) return;
     if (isBefore(startOfDay(date), startOfDay(startDate))) return;
+    if (stats.estimatedEndDate && isAfter(startOfDay(date), startOfDay(stats.estimatedEndDate))) return;
 
     const start = dragStart < date ? dragStart : date;
     const end = dragStart > date ? dragStart : date;
@@ -382,11 +384,13 @@ const App: React.FC = () => {
                 const isWorkDay = hours > 0;
                 const isToday = isSameDay(date, new Date());
                 const isBeforeStart = startDate && isBefore(startOfDay(date), startOfDay(startDate));
+                const isAfterEnd = stats.estimatedEndDate && isAfter(startOfDay(date), startOfDay(stats.estimatedEndDate));
+                const isDisabled = isBeforeStart || isAfterEnd;
                 const inDragSelection = dragSelection.has(key);
 
                 return (
-                  <button key={date.toString()} onMouseDown={() => handleMouseDown(date)} onMouseEnter={() => handleMouseEnter(date)} onClick={() => setSelectedDate(date)}
-                    className={`relative aspect-square flex flex-col items-center justify-center rounded-2xl transition-all duration-100 ${isSelected ? 'ring-[3px] ring-indigo-400 z-10 scale-105' : ''} ${inDragSelection ? (dragMode === 'work' ? 'bg-indigo-400 text-white scale-95 shadow-inner' : 'bg-gray-200 scale-95 shadow-inner') : isWorkDay ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'bg-gray-50/50 text-gray-300'} ${isBeforeStart ? 'opacity-10 pointer-events-none' : 'hover:bg-rose-50 cursor-pointer'} ${isToday ? 'outline outline-2 outline-rose-200' : ''}`}>
+                  <button key={date.toString()} onMouseDown={() => handleMouseDown(date)} onMouseEnter={() => handleMouseEnter(date)} onClick={() => !isDisabled && setSelectedDate(date)}
+                    className={`relative aspect-square flex flex-col items-center justify-center rounded-2xl transition-all duration-100 ${isSelected ? 'ring-[3px] ring-indigo-400 z-10 scale-105' : ''} ${inDragSelection ? (dragMode === 'work' ? 'bg-indigo-400 text-white scale-95 shadow-inner' : 'bg-gray-200 scale-95 shadow-inner') : isWorkDay ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'bg-gray-50/50 text-gray-300'} ${isDisabled ? 'opacity-10 pointer-events-none' : 'hover:bg-rose-50 cursor-pointer'} ${isToday ? 'outline outline-2 outline-rose-200' : ''}`}>
                     <span className="text-base font-black">{format(date, 'd')}</span>
                     {isWorkDay && !inDragSelection && (<span className="text-[10px] font-black opacity-60 leading-none mt-0.5">{hours}h</span>)}
                   </button>
@@ -394,7 +398,7 @@ const App: React.FC = () => {
               })}
             </div>
 
-            {selectedDate && startDate && !isBefore(selectedDate, startDate) && (
+            {selectedDate && startDate && !isBefore(selectedDate, startDate) && !(stats.estimatedEndDate && isAfter(selectedDate, stats.estimatedEndDate)) && (
               <div className="mt-8 p-6 bg-indigo-50/40 rounded-3xl border border-indigo-100 flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in zoom-in-95">
                 <div className="text-center md:text-left"><p className="text-[10px] font-black text-indigo-400 uppercase mb-1">Customizing</p><h3 className="text-xl font-black text-gray-800">{format(selectedDate, 'EEEE, MMM do')}</h3></div>
                 <div className="flex items-center gap-6"><div className="flex items-center bg-white rounded-2xl p-1.5 shadow-md border border-indigo-100"><button onClick={() => updateOvertime(selectedDate, -1)} className="p-3 text-indigo-400 bg-gray-50 rounded-xl hover:bg-rose-50"><Minus className="w-5 h-5" /></button><div className="px-6 text-center min-w-[120px]"><span className="block text-[10px] font-black text-gray-400 uppercase mb-0.5">Hours</span><span className="text-2xl font-black text-indigo-700">{getDayDisplayHours(selectedDate)}h</span></div><button onClick={() => updateOvertime(selectedDate, 1)} className="p-3 text-indigo-400 bg-gray-50 rounded-xl hover:bg-rose-50"><Plus className="w-5 h-5" /></button></div></div>
