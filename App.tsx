@@ -1,0 +1,494 @@
+
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { 
+  Clock, 
+  Target, 
+  Plus, 
+  Minus,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  FileText,
+  Trash2,
+  X,
+  Download,
+  CalendarCheck,
+  MousePointer2,
+  Layers,
+  CalendarDays,
+  FileJson,
+  Table,
+  Calendar,
+  Settings2,
+  FileDown
+} from 'lucide-react';
+import { 
+  format, 
+  startOfMonth, 
+  endOfMonth, 
+  eachDayOfInterval, 
+  isSameDay, 
+  addMonths, 
+  subMonths,
+  parseISO,
+  startOfDay,
+  isWeekend,
+  isBefore,
+  isValid,
+  isAfter,
+  getDay
+} from 'date-fns';
+import { jsPDF } from 'jspdf';
+import { DayMap, DayStatus, PlanningMode } from './types';
+import { getDateKey, calculateDayHours, getInternshipStats, generateCSV, downloadFile } from './utils';
+
+const STORAGE_KEY = 'internship_buddy_data_v5';
+
+const App: React.FC = () => {
+  const [goal, setGoal] = useState<number | ''>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).goal : '';
+  });
+  const [startDateStr, setStartDateStr] = useState<string>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).startDateStr : '';
+  });
+  const [adjustments, setAdjustments] = useState<DayMap>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).adjustments : {};
+  });
+  const [mode, setMode] = useState<PlanningMode>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).mode : 'automatic';
+  });
+  const [excludedDays, setExcludedDays] = useState<number[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).excludedDays : [0, 6];
+  });
+
+  const [viewDate, setViewDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
+
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState<Date | null>(null);
+  const [dragSelection, setDragSelection] = useState<Set<string>>(new Set());
+  const [dragMode, setDragMode] = useState<DayStatus>('work');
+
+  const startDate = useMemo(() => {
+    if (!startDateStr) return null;
+    const parsed = parseISO(startDateStr);
+    return isValid(parsed) ? parsed : null;
+  }, [startDateStr]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ goal, startDateStr, adjustments, mode, excludedDays }));
+  }, [goal, startDateStr, adjustments, mode, excludedDays]);
+
+  const numericGoal = typeof goal === 'number' ? goal : 0;
+  const stats = useMemo(() => getInternshipStats(numericGoal, startDate, adjustments, mode, excludedDays), [numericGoal, startDate, adjustments, mode, excludedDays]);
+
+  const groupedWorkDays = useMemo(() => {
+    const groups: { [month: string]: { date: Date; hours: number }[] } = {};
+    stats.workDays.forEach(wd => {
+      const monthKey = format(wd.date, 'MMMM yyyy');
+      if (!groups[monthKey]) groups[monthKey] = [];
+      groups[monthKey].push(wd);
+    });
+    return groups;
+  }, [stats.workDays]);
+
+  const monthDays = useMemo(() => {
+    const start = startOfMonth(viewDate);
+    const end = endOfMonth(viewDate);
+    return eachDayOfInterval({ start, end });
+  }, [viewDate]);
+
+  const getDayDisplayHours = (date: Date) => {
+    return calculateDayHours(date, adjustments, mode, excludedDays);
+  };
+
+  const toggleExcludedDay = (day: number) => {
+    setExcludedDays(prev => 
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
+  };
+
+  const handleMouseDown = (date: Date) => {
+    if (startDate && isBefore(startOfDay(date), startOfDay(startDate))) return;
+    if (!startDate) return;
+    
+    setIsDragging(true);
+    setDragStart(date);
+    const key = getDateKey(date);
+    
+    const currentHours = getDayDisplayHours(date);
+    const nextStatus: DayStatus = currentHours > 0 ? 'off' : 'work';
+    
+    setDragMode(nextStatus);
+    setDragSelection(new Set([key]));
+  };
+
+  const handleMouseEnter = (date: Date) => {
+    if (!isDragging || !dragStart || !startDate) return;
+    if (isBefore(startOfDay(date), startOfDay(startDate))) return;
+
+    const start = dragStart < date ? dragStart : date;
+    const end = dragStart > date ? dragStart : date;
+    
+    const range = eachDayOfInterval({ start, end });
+    const newSelection = new Set<string>();
+    range.forEach(d => {
+      newSelection.add(getDateKey(d));
+    });
+    setDragSelection(newSelection);
+  };
+
+  const handleMouseUp = useCallback(() => {
+    if (!isDragging) return;
+    setAdjustments(prev => {
+      const next = { ...prev };
+      dragSelection.forEach(key => {
+        next[key] = {
+          status: dragMode,
+          overtime: prev[key]?.overtime || 0
+        };
+      });
+      return next;
+    });
+    setIsDragging(false);
+    setDragStart(null);
+    setDragSelection(new Set());
+  }, [isDragging, dragSelection, dragMode]);
+
+  useEffect(() => {
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, [handleMouseUp]);
+
+  const updateOvertime = (date: Date, delta: number) => {
+    const key = getDateKey(date);
+    setAdjustments(prev => {
+      const current = prev[key] || { 
+        status: getDayDisplayHours(date) > 0 ? 'work' : 'off', 
+        overtime: 0 
+      };
+      const newStatus: DayStatus = current.status === 'off' && delta > 0 ? 'work' : current.status;
+      const newOvertime = Math.max(0, current.overtime + delta);
+      return { ...prev, [key]: { ...current, status: newStatus, overtime: newOvertime } };
+    });
+  };
+
+  const clearAll = () => {
+    if (confirm("Clear all planned hours and settings?")) {
+      setAdjustments({});
+      setGoal('');
+      setStartDateStr('');
+      setExcludedDays([0, 6]);
+    }
+  };
+
+  const generatePDFReport = () => {
+    const doc = new jsPDF();
+    const title = "Internship Buddy - Progress Report";
+    const dateGenerated = `Generated on: ${format(new Date(), 'PPpp')}`;
+
+    doc.setFontSize(22);
+    doc.setTextColor(79, 70, 229); // Indigo-600
+    doc.text(title, 20, 25);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(156, 163, 175); // Gray-400
+    doc.text(dateGenerated, 20, 32);
+
+    doc.setFontSize(14);
+    doc.setTextColor(31, 41, 55); // Gray-800
+    doc.text("Summary", 20, 45);
+    
+    doc.setFontSize(12);
+    doc.text(`Target Hours: ${numericGoal}h`, 25, 55);
+    doc.text(`Accumulated: ${stats.accumulatedTowardsGoal}h`, 25, 62);
+    doc.text(`Remaining: ${stats.remaining}h`, 25, 69);
+    doc.text(`Progress: ${Math.round(stats.progressPercentage)}%`, 25, 76);
+    doc.text(`Work Days: ${stats.workDaysCount}`, 25, 83);
+    doc.text(`Projected End Date: ${stats.estimatedEndDateStr}`, 25, 90);
+
+    doc.text("Schedule Details", 20, 105);
+    
+    let y = 115;
+    stats.workDays.slice(0, 40).forEach((wd) => {
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.setFontSize(10);
+      doc.text(`${format(wd.date, 'yyyy-MM-dd')} (${format(wd.date, 'EEE')})`, 25, y);
+      doc.text(`${wd.hours} hours`, 100, y);
+      y += 7;
+    });
+
+    if (stats.workDays.length > 40) {
+        doc.setFontSize(8);
+        doc.setTextColor(156, 163, 175);
+        doc.text(`... and ${stats.workDays.length - 40} more days. See CSV for full list.`, 25, y);
+    }
+
+    doc.save(`internship-report-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+  };
+
+  return (
+    <div className="min-h-screen pb-24 px-4 md:px-8 max-w-6xl mx-auto select-none">
+      <header className="py-8 flex flex-col items-center text-center space-y-2">
+        <div className="bg-rose-100 p-3 rounded-2xl mb-2">
+          <Heart className="w-8 h-8 text-rose-500 fill-rose-500" />
+        </div>
+        <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Internship Buddy</h1>
+        <p className="text-gray-500 max-w-md">Track your hours, exclude off-days, and hit your goal! 🎓</p>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-4 space-y-6">
+          <section className="cute-card bg-white p-6 space-y-6 border border-rose-50 shadow-sm">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                <Target className="w-5 h-5 text-rose-400" /> Setup
+              </h2>
+              <button onClick={clearAll} className="text-xs flex items-center gap-1 text-gray-400 hover:text-rose-500 transition-colors">
+                <Trash2 className="w-3.5 h-3.5" /> Reset
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2">Target Hours</label>
+                <div className="relative group">
+                  <input 
+                    type="number" 
+                    placeholder="Enter total hours..." 
+                    value={goal} 
+                    onChange={(e) => setGoal(e.target.value === '' ? '' : Number(e.target.value))} 
+                    className="w-full bg-rose-50/50 border border-rose-100 rounded-2xl pl-5 pr-12 py-4 focus:ring-2 focus:ring-rose-200 focus:outline-none text-xl font-bold text-gray-700 transition-all" 
+                  />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-rose-200 group-focus-within:text-rose-400 transition-colors">
+                    <Clock className="w-6 h-6" />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2">Start Date</label>
+                <input type="date" value={startDateStr} onChange={(e) => setStartDateStr(e.target.value)} className="w-full bg-rose-50/50 border border-rose-100 rounded-2xl px-5 py-4 focus:ring-2 focus:ring-rose-200 focus:outline-none font-bold text-gray-700" />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2">Weekly Work Days</label>
+                <div className="flex justify-between bg-gray-50 p-2 rounded-2xl">
+                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((dayName, idx) => {
+                    const isExcluded = excludedDays.includes(idx);
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => toggleExcludedDay(idx)}
+                        className={`w-9 h-9 rounded-xl text-[10px] font-black transition-all border ${!isExcluded ? 'bg-indigo-500 text-white border-indigo-600 shadow-sm' : 'bg-white text-gray-300 border-gray-100 hover:bg-rose-50'}`}
+                      >
+                        {dayName}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2 italic flex items-center gap-1">
+                   <Settings2 className="w-3 h-3" /> Uncheck days you won't attend.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2">Auto-Projection</label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-gray-50 rounded-2xl">
+                  <button onClick={() => setMode('manual')} className={`flex flex-col items-center gap-1 p-2 rounded-xl text-[10px] font-bold transition-all ${mode === 'manual' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400'}`}>
+                    <MousePointer2 className="w-4 h-4" /> Manual
+                  </button>
+                  <button onClick={() => setMode('automatic')} className={`flex flex-col items-center gap-1 p-2 rounded-xl text-[10px] font-bold transition-all ${mode === 'automatic' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-400'}`}>
+                    <Layers className="w-4 h-4" /> Auto
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="cute-card bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 p-7 text-white space-y-5 shadow-xl shadow-indigo-200 relative overflow-hidden group">
+            <div className="absolute -right-8 -top-8 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-700"></div>
+            <div className="flex justify-between items-start relative z-10">
+              <h2 className="text-xl font-black tracking-tight">Your Progress</h2>
+              <div className="bg-white/20 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest backdrop-blur-sm">Live</div>
+            </div>
+            
+            <div className="space-y-2 relative z-10">
+              <div className="flex justify-between text-sm font-bold opacity-90">
+                <span>{stats.accumulatedTowardsGoal} / {numericGoal} hrs</span>
+                <span>{Math.round(stats.progressPercentage)}%</span>
+              </div>
+              <div className="h-4 bg-black/10 rounded-full overflow-hidden border border-white/10 p-0.5">
+                <div className="h-full bg-white rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(255,255,255,0.5)]" style={{ width: `${stats.progressPercentage}%` }} />
+              </div>
+              <p className="text-[11px] font-bold text-white/70 text-right">
+                {stats.workDaysCount} / {stats.totalCalendarDays} days required
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-2 relative z-10">
+              <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/5">
+                <p className="text-[10px] opacity-70 uppercase font-black tracking-widest mb-1">Remaining</p>
+                <p className="text-2xl font-black">{stats.remaining}h</p>
+              </div>
+              <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/5">
+                <p className="text-[10px] opacity-70 uppercase font-black tracking-widest mb-1">Projected End</p>
+                <p className="text-xs font-black leading-tight h-8 flex items-center">{stats.estimatedEndDateStr}</p>
+              </div>
+            </div>
+
+            <button onClick={() => setShowSummary(true)} className="w-full py-4 bg-white text-indigo-600 rounded-2xl font-black text-sm flex items-center justify-center gap-3 hover:bg-rose-50 transition-all shadow-lg group">
+              <FileDown className="w-5 h-5 group-hover:rotate-6" /> View Report & Download
+            </button>
+          </section>
+        </div>
+
+        <div className="lg:col-span-8 space-y-6">
+          <section className="cute-card bg-white p-7 border border-rose-50 shadow-sm relative overflow-hidden">
+            {!startDate && (
+              <div className="absolute inset-0 z-20 bg-white/60 backdrop-blur-[2px] rounded-[24px] flex items-center justify-center p-8 text-center animate-in fade-in duration-500">
+                 <div className="bg-white p-8 rounded-3xl shadow-2xl border border-rose-50 max-sm space-y-4">
+                    <CalendarDays className="w-12 h-12 text-rose-300 mx-auto" />
+                    <h3 className="text-xl font-black text-gray-800">Start Planning</h3>
+                    <p className="text-sm text-gray-500">Select your start date and work days on the left to activate the calendar.</p>
+                 </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-2xl font-black text-gray-800 tracking-tight">{format(viewDate, 'MMMM yyyy')}</h2>
+              <div className="flex gap-3">
+                <button onClick={() => setViewDate(subMonths(viewDate, 1))} className="p-3 bg-gray-50 hover:bg-rose-50 rounded-2xl transition-all text-rose-400 hover:scale-110"><ChevronLeft className="w-6 h-6" /></button>
+                <button onClick={() => setViewDate(addMonths(viewDate, 1))} className="p-3 bg-gray-50 hover:bg-rose-50 rounded-2xl transition-all text-rose-400 hover:scale-110"><ChevronRight className="w-6 h-6" /></button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-2 md:gap-3 mb-6 text-center">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => (<div key={day} className="text-xs font-black text-gray-300 py-2 uppercase tracking-tighter">{day}</div>))}
+              {Array.from({ length: startOfMonth(viewDate).getDay() }).map((_, i) => (<div key={`empty-${i}`} className="aspect-square" />))}
+              {monthDays.map(date => {
+                const key = getDateKey(date);
+                const hours = getDayDisplayHours(date);
+                const isSelected = selectedDate && isSameDay(date, selectedDate);
+                const isWorkDay = hours > 0;
+                const isToday = isSameDay(date, new Date());
+                const isBeforeStart = startDate && isBefore(startOfDay(date), startOfDay(startDate));
+                const inDragSelection = dragSelection.has(key);
+
+                return (
+                  <button key={date.toString()} onMouseDown={() => handleMouseDown(date)} onMouseEnter={() => handleMouseEnter(date)} onClick={() => setSelectedDate(date)}
+                    className={`relative aspect-square flex flex-col items-center justify-center rounded-2xl transition-all duration-100 ${isSelected ? 'ring-[3px] ring-indigo-400 z-10 scale-105' : ''} ${inDragSelection ? (dragMode === 'work' ? 'bg-indigo-400 text-white scale-95 shadow-inner' : 'bg-gray-200 scale-95 shadow-inner') : isWorkDay ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'bg-gray-50/50 text-gray-300'} ${isBeforeStart ? 'opacity-10 pointer-events-none' : 'hover:bg-rose-50 cursor-pointer'} ${isToday ? 'outline outline-2 outline-rose-200' : ''}`}>
+                    <span className="text-base font-black">{format(date, 'd')}</span>
+                    {isWorkDay && !inDragSelection && (<span className="text-[10px] font-black opacity-60 leading-none mt-0.5">{hours}h</span>)}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedDate && startDate && !isBefore(selectedDate, startDate) && (
+              <div className="mt-8 p-6 bg-indigo-50/40 rounded-3xl border border-indigo-100 flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in zoom-in-95">
+                <div className="text-center md:text-left"><p className="text-[10px] font-black text-indigo-400 uppercase mb-1">Customizing</p><h3 className="text-xl font-black text-gray-800">{format(selectedDate, 'EEEE, MMM do')}</h3></div>
+                <div className="flex items-center gap-6"><div className="flex items-center bg-white rounded-2xl p-1.5 shadow-md border border-indigo-100"><button onClick={() => updateOvertime(selectedDate, -1)} className="p-3 text-indigo-400 bg-gray-50 rounded-xl hover:bg-rose-50"><Minus className="w-5 h-5" /></button><div className="px-6 text-center min-w-[120px]"><span className="block text-[10px] font-black text-gray-400 uppercase mb-0.5">Hours</span><span className="text-2xl font-black text-indigo-700">{getDayDisplayHours(selectedDate)}h</span></div><button onClick={() => updateOvertime(selectedDate, 1)} className="p-3 text-indigo-400 bg-gray-50 rounded-xl hover:bg-rose-50"><Plus className="w-5 h-5" /></button></div></div>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+
+      {showSummary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] max-h-[90vh] overflow-hidden flex flex-col shadow-2xl scale-in-center">
+            <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-10">
+              <div className="flex items-center gap-4"><div className="p-3 bg-indigo-100 rounded-2xl"><CalendarCheck className="w-7 h-7 text-indigo-600" /></div><div><h2 className="text-2xl font-black text-gray-800">Internship Report</h2><p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Plan Projection</p></div></div>
+              <button onClick={() => setShowSummary(false)} className="p-3 hover:bg-gray-100 rounded-2xl transition-all text-gray-400 hover:rotate-90"><X className="w-7 h-7" /></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-8 space-y-10 bg-gray-50/30 scrollbar-hide">
+              <div className="bg-indigo-600 p-6 rounded-[32px] text-white flex flex-col items-center gap-6 shadow-xl shadow-indigo-100">
+                <div className="text-center w-full">
+                  <p className="text-lg font-black mb-1">Download Your Schedule</p>
+                  <p className="text-xs opacity-80 font-medium">Export in the format that works best for you.</p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
+                  <button onClick={generatePDFReport} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group">
+                    <FileText className="w-6 h-6" />
+                    <span className="text-[10px] font-black uppercase">PDF Version</span>
+                  </button>
+                  <button onClick={() => downloadFile(generateCSV(stats.workDays), `internship-report.csv`, 'text/csv')} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group">
+                    <Table className="w-6 h-6" />
+                    <span className="text-[10px] font-black uppercase">CSV Table</span>
+                  </button>
+                  <button onClick={() => downloadFile(JSON.stringify({ goal, startDateStr, adjustments, mode, excludedDays }, null, 2), `internship-backup.json`, 'application/json')} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group">
+                    <FileJson className="w-6 h-6" />
+                    <span className="text-[10px] font-black uppercase">Data Backup</span>
+                  </button>
+                  <button onClick={() => window.print()} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group opacity-40 hover:opacity-100">
+                    <Download className="w-6 h-6" />
+                    <span className="text-[10px] font-black uppercase">System Print</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: 'Hours Hit', val: `${stats.accumulatedTowardsGoal}h`, color: 'text-indigo-600' },
+                  { label: 'Target', val: `${numericGoal}h`, color: 'text-gray-700' },
+                  { label: 'Work Days', val: `${stats.workDaysCount}`, color: 'text-rose-500' },
+                  { label: 'Calendar Days', val: `${stats.totalCalendarDays}`, color: 'text-gray-700' }
+                ].map((s, i) => (
+                  <div key={i} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm text-center">
+                    <p className="text-[9px] text-gray-400 font-black uppercase mb-1.5">{s.label}</p>
+                    <p className={`text-base font-black ${s.color} truncate`}>{s.val}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-8">
+                {Object.keys(groupedWorkDays).length === 0 ? (
+                  <div className="text-center py-20 text-gray-300 italic bg-white rounded-[40px] border-4 border-dashed border-gray-50 flex flex-col items-center gap-4"><CalendarDays className="w-12 h-12 opacity-20" /><p className="font-bold">No days planned yet.</p></div>
+                ) : (
+                  (Object.entries(groupedWorkDays) as [string, { date: Date; hours: number }[]][]).map(([month, days]) => {
+                    const monthTotal = days.reduce((acc, d) => acc + d.hours, 0);
+                    return (
+                      <div key={month} className="space-y-4">
+                        <div className="flex items-center justify-between px-4"><h3 className="text-base font-black text-gray-800 uppercase tracking-widest flex items-center gap-2"><div className="w-2 h-6 bg-indigo-500 rounded-full"></div>{month}</h3><span className="text-xs font-black bg-indigo-50 text-indigo-600 px-4 py-2 rounded-2xl">{monthTotal} hours</span></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {days.map((wd, i) => (
+                            <div key={i} className="bg-white px-5 py-4 rounded-[24px] border border-gray-100 flex items-center justify-between shadow-sm group">
+                              <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-2xl bg-gray-50 flex flex-col items-center justify-center text-gray-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all"><span className="text-[10px] font-black uppercase">{format(wd.date, 'MMM')}</span><span className="text-sm font-black">{format(wd.date, 'dd')}</span></div><div><p className="text-sm font-black text-gray-700">{format(wd.date, 'EEEE')}</p><p className="text-[10px] text-gray-400 font-bold uppercase">Work Session</p></div></div>
+                              <p className="text-sm font-black text-indigo-600 bg-indigo-50/50 px-3 py-2 rounded-xl">{wd.hours}h</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-12 text-center space-y-6">
+        <div className="inline-flex flex-wrap justify-center items-center gap-6 bg-white px-8 py-4 rounded-full border border-gray-100 text-[11px] font-black text-gray-400 shadow-sm">
+          <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 bg-indigo-100 rounded-md"></div> Scheduled</div>
+          <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 bg-white border-2 border-rose-100 rounded-md"></div> Today</div>
+          <div className="flex items-center gap-2.5"><div className="w-3.5 h-3.5 bg-gray-50 rounded-md"></div> Holiday/Off</div>
+        </div>
+        <p className="text-xs text-gray-300 font-medium">Data stays on your device. Projections update instantly as you change your schedule.</p>
+      </div>
+    </div>
+  );
+};
+
+export default App;
