@@ -584,7 +584,7 @@ const App: React.FC = () => {
                 </button>
                 <button 
                   onClick={confirmReset} 
-                  className="flex-1 py-4 px-6 bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 text-white rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-200"
+                  className="flex-1 py-4 px-6 bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 text-white rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-200"
                 >
                   <Trash2 className="w-4 h-4" />
                   Reset All
