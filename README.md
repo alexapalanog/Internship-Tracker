@@ -1,4 +1,4 @@
-# Internship Buddy
+# Internship Planner
 
 This is a simple website for interns who want to keep track of their hours and days progress. It helps you see how much you've worked, plan your schedule, and know when your internship will end.
 
