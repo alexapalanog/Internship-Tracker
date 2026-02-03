@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
   Clock, 
   Target, 
@@ -20,7 +20,8 @@ import {
   Table,
   Calendar,
   Settings2,
-  FileDown
+  FileDown,
+  Upload
 } from 'lucide-react';
 import { 
   format, 
@@ -74,6 +75,8 @@ const App: React.FC = () => {
   const [dragStart, setDragStart] = useState<Date | null>(null);
   const [dragSelection, setDragSelection] = useState<Set<string>>(new Set());
   const [dragMode, setDragMode] = useState<DayStatus>('work');
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const startDate = useMemo(() => {
     if (!startDateStr) return null;
@@ -188,6 +191,52 @@ const App: React.FC = () => {
       setStartDateStr('');
       setExcludedDays([0, 6]);
     }
+  };
+
+  const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const data = JSON.parse(content);
+
+        // Validate the data structure
+        if (typeof data.goal !== 'number' && data.goal !== '') {
+          throw new Error('Invalid goal format');
+        }
+        if (typeof data.startDateStr !== 'string') {
+          throw new Error('Invalid start date format');
+        }
+        if (typeof data.adjustments !== 'object') {
+          throw new Error('Invalid adjustments format');
+        }
+        if (data.mode !== 'manual' && data.mode !== 'automatic') {
+          throw new Error('Invalid mode format');
+        }
+        if (!Array.isArray(data.excludedDays)) {
+          throw new Error('Invalid excluded days format');
+        }
+
+        // Apply the imported data
+        setGoal(data.goal);
+        setStartDateStr(data.startDateStr);
+        setAdjustments(data.adjustments);
+        setMode(data.mode);
+        setExcludedDays(data.excludedDays);
+
+        alert('✅ Backup restored successfully!');
+      } catch (error) {
+        alert('❌ Invalid backup file. Please select a valid JSON backup.');
+        console.error('Import error:', error);
+      }
+    };
+    reader.readAsText(file);
+    
+    // Reset the input so the same file can be selected again
+    event.target.value = '';
   };
 
   const generatePDFReport = () => {
@@ -422,7 +471,7 @@ const App: React.FC = () => {
                   <p className="text-lg font-black mb-1">Download Your Schedule</p>
                   <p className="text-xs opacity-80 font-medium">Export in the format that works best for you.</p>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full">
                   <button onClick={generatePDFReport} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group">
                     <FileText className="w-6 h-6" />
                     <span className="text-[10px] font-black uppercase">PDF Version</span>
@@ -431,15 +480,26 @@ const App: React.FC = () => {
                     <Table className="w-6 h-6" />
                     <span className="text-[10px] font-black uppercase">CSV Table</span>
                   </button>
-                  <button onClick={() => downloadFile(JSON.stringify({ goal, startDateStr, adjustments, mode, excludedDays }, null, 2), `internship-backup.json`, 'application/json')} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group">
+                  <button onClick={() => downloadFile(JSON.stringify({ goal, startDateStr, adjustments, mode, excludedDays }, null, 2), `internship-backup-${format(new Date(), 'yyyy-MM-dd')}.json`, 'application/json')} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group">
                     <FileJson className="w-6 h-6" />
                     <span className="text-[10px] font-black uppercase">Data Backup</span>
+                  </button>
+                  <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group">
+                    <Upload className="w-6 h-6" />
+                    <span className="text-[10px] font-black uppercase">Restore Backup</span>
                   </button>
                   <button onClick={() => window.print()} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group opacity-40 hover:opacity-100">
                     <Download className="w-6 h-6" />
                     <span className="text-[10px] font-black uppercase">System Print</span>
                   </button>
                 </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleImportBackup}
+                  className="hidden"
+                />
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
