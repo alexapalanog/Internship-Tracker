@@ -72,37 +72,57 @@ export const getInternshipStats = (
     const hours = calculateDayHours(checkDate, adjustments, mode, excludedDays);
 
     if (hours > 0) {
-      if (accumulated < goal) {
+      // In manual mode, always accumulate hours; in auto mode, only until goal
+      if (mode === 'manual') {
         accumulated += hours;
-        workDaysToGoal++;
+        workDays.push({ date: new Date(checkDate), hours });
+        if (accumulated <= goal) {
+          workDaysToGoal++;
+        }
         if (accumulated >= goal && !estimatedEndDate) {
           estimatedEndDate = new Date(checkDate);
         }
-      }
-      
-      if (accumulated <= goal || hasManual || mode === 'manual') {
+      } else {
+        // Auto mode - stop accumulating after goal
+        if (accumulated < goal) {
+          accumulated += hours;
+          workDaysToGoal++;
+          if (accumulated >= goal && !estimatedEndDate) {
+            estimatedEndDate = new Date(checkDate);
+          }
+        }
+        
+        if (accumulated <= goal) {
           workDays.push({ date: new Date(checkDate), hours });
+        }
       }
     }
 
-    if (accumulated >= goal && daysProcessed > 730) {
+    // In manual mode, only stop if no more manual entries; in auto mode, stop after goal + buffer
+    if (mode === 'automatic' && accumulated >= goal && daysProcessed > 730) {
+        break;
+    }
+    
+    // In manual mode, stop if we've gone 365 days without any manual entries after hitting goal
+    if (mode === 'manual' && accumulated >= goal && !hasManual && daysProcessed > 365) {
         break;
     }
 
     checkDate = addDays(checkDate, 1);
     daysProcessed++;
-    
-    if (accumulated >= goal && daysProcessed > 730) break;
   }
 
   const progress = goal > 0 ? Math.min(100, (accumulated / goal) * 100) : 0;
   const calDays = estimatedEndDate ? differenceInDays(estimatedEndDate, start) + 1 : 0;
+  const exceeded = accumulated > goal;
 
   return {
     totalGoal: goal,
-    accumulatedTowardsGoal: Math.min(accumulated, goal),
+    accumulatedTowardsGoal: accumulated,
     remaining: Math.max(0, goal - accumulated),
     progressPercentage: progress,
+    exceeded,
+    excessHours: exceeded ? accumulated - goal : 0,
     estimatedEndDate,
     estimatedEndDateStr: estimatedEndDate ? format(estimatedEndDate, 'MMMM do, yyyy') : (goal > 0 ? 'Goal not reached' : 'Set goal'),
     workDaysCount: workDaysToGoal,

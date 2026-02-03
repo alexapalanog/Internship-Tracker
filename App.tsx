@@ -120,7 +120,8 @@ const App: React.FC = () => {
   const handleMouseDown = (date: Date) => {
     if (startDate && isBefore(startOfDay(date), startOfDay(startDate))) return;
     if (!startDate) return;
-    if (stats.estimatedEndDate && isAfter(startOfDay(date), startOfDay(stats.estimatedEndDate))) return;
+    // In manual mode, allow selecting any date after start; in auto mode, restrict to estimated end date
+    if (mode === 'automatic' && stats.estimatedEndDate && isAfter(startOfDay(date), startOfDay(stats.estimatedEndDate))) return;
     
     setIsDragging(true);
     setDragStart(date);
@@ -136,7 +137,8 @@ const App: React.FC = () => {
   const handleMouseEnter = (date: Date) => {
     if (!isDragging || !dragStart || !startDate) return;
     if (isBefore(startOfDay(date), startOfDay(startDate))) return;
-    if (stats.estimatedEndDate && isAfter(startOfDay(date), startOfDay(stats.estimatedEndDate))) return;
+    // In manual mode, allow selecting any date after start; in auto mode, restrict to estimated end date
+    if (mode === 'automatic' && stats.estimatedEndDate && isAfter(startOfDay(date), startOfDay(stats.estimatedEndDate))) return;
 
     const start = dragStart < date ? dragStart : date;
     const end = dragStart > date ? dragStart : date;
@@ -366,20 +368,20 @@ const App: React.FC = () => {
             </div>
           </section>
 
-          <section className="cute-card bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 p-7 text-white space-y-5 shadow-xl shadow-indigo-200 relative overflow-hidden group">
+          <section className={`cute-card p-7 text-white space-y-5 shadow-xl relative overflow-hidden group ${stats.exceeded ? 'bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 shadow-emerald-200' : 'bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 shadow-indigo-200'}`}>
             <div className="absolute -right-8 -top-8 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-125 transition-transform duration-700"></div>
             <div className="flex justify-between items-start relative z-10">
               <h2 className="text-xl font-black tracking-tight">Your Progress</h2>
-              <div className="bg-white/20 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest backdrop-blur-sm">Live</div>
+              <div className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest backdrop-blur-sm ${stats.exceeded ? 'bg-yellow-400/30 text-yellow-100' : 'bg-white/20'}`}>{stats.exceeded ? '🎉 Goal Exceeded!' : 'Live'}</div>
             </div>
             
             <div className="space-y-2 relative z-10">
               <div className="flex justify-between text-sm font-bold opacity-90">
-                <span>{stats.accumulatedTowardsGoal} / {numericGoal} hrs</span>
+                <span>{stats.accumulatedTowardsGoal} / {numericGoal} hrs {stats.exceeded && <span className="text-yellow-200">(+{stats.excessHours}h extra)</span>}</span>
                 <span>{Math.round(stats.progressPercentage)}%</span>
               </div>
               <div className="h-4 bg-black/10 rounded-full overflow-hidden border border-white/10 p-0.5">
-                <div className="h-full bg-white rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(255,255,255,0.5)]" style={{ width: `${stats.progressPercentage}%` }} />
+                <div className={`h-full rounded-full transition-all duration-1000 ease-out ${stats.exceeded ? 'bg-yellow-300 shadow-[0_0_10px_rgba(253,224,71,0.5)]' : 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]'}`} style={{ width: `${stats.progressPercentage}%` }} />
               </div>
               <p className="text-[11px] font-bold text-white/70 text-right">
                 {stats.workDaysCount} / {stats.totalCalendarDays} days required
@@ -388,8 +390,8 @@ const App: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-4 pt-2 relative z-10">
               <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/5">
-                <p className="text-[10px] opacity-70 uppercase font-black tracking-widest mb-1">Remaining</p>
-                <p className="text-2xl font-black">{stats.remaining}h</p>
+                <p className="text-[10px] opacity-70 uppercase font-black tracking-widest mb-1">{stats.exceeded ? 'Extra Hours' : 'Remaining'}</p>
+                <p className="text-2xl font-black">{stats.exceeded ? `+${stats.excessHours}h` : `${stats.remaining}h`}</p>
               </div>
               <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm border border-white/5">
                 <p className="text-[10px] opacity-70 uppercase font-black tracking-widest mb-1">Projected End</p>
@@ -433,7 +435,8 @@ const App: React.FC = () => {
                 const isWorkDay = hours > 0;
                 const isToday = isSameDay(date, new Date());
                 const isBeforeStart = startDate && isBefore(startOfDay(date), startOfDay(startDate));
-                const isAfterEnd = stats.estimatedEndDate && isAfter(startOfDay(date), startOfDay(stats.estimatedEndDate));
+                // In manual mode, allow any date after start; in auto mode, restrict to estimated end date
+                const isAfterEnd = mode === 'automatic' && stats.estimatedEndDate && isAfter(startOfDay(date), startOfDay(stats.estimatedEndDate));
                 const isDisabled = isBeforeStart || isAfterEnd;
                 const inDragSelection = dragSelection.has(key);
 
@@ -447,7 +450,7 @@ const App: React.FC = () => {
               })}
             </div>
 
-            {selectedDate && startDate && !isBefore(selectedDate, startDate) && !(stats.estimatedEndDate && isAfter(selectedDate, stats.estimatedEndDate)) && (
+            {selectedDate && startDate && !isBefore(selectedDate, startDate) && !(mode === 'automatic' && stats.estimatedEndDate && isAfter(selectedDate, stats.estimatedEndDate)) && (
               <div className="mt-8 p-6 bg-indigo-50/40 rounded-3xl border border-indigo-100 flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in zoom-in-95">
                 <div className="text-center md:text-left"><p className="text-[10px] font-black text-indigo-400 uppercase mb-1">Customizing</p><h3 className="text-xl font-black text-gray-800">{format(selectedDate, 'EEEE, MMM do')}</h3></div>
                 <div className="flex items-center gap-6"><div className="flex items-center bg-white rounded-2xl p-1.5 shadow-md border border-indigo-100"><button onClick={() => updateOvertime(selectedDate, -1)} className="p-3 text-indigo-400 bg-gray-50 rounded-xl hover:bg-rose-50"><Minus className="w-5 h-5" /></button><div className="px-6 text-center min-w-[120px]"><span className="block text-[10px] font-black text-gray-400 uppercase mb-0.5">Hours</span><span className="text-2xl font-black text-indigo-700">{getDayDisplayHours(selectedDate)}h</span></div><button onClick={() => updateOvertime(selectedDate, 1)} className="p-3 text-indigo-400 bg-gray-50 rounded-xl hover:bg-rose-50"><Plus className="w-5 h-5" /></button></div></div>
