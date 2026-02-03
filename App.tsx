@@ -21,7 +21,9 @@ import {
   Calendar,
   Settings2,
   FileDown,
-  Upload
+  Upload,
+  AlertTriangle,
+  Sparkles
 } from 'lucide-react';
 import { 
   format, 
@@ -70,6 +72,7 @@ const App: React.FC = () => {
   const [viewDate, setViewDate] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showSummary, setShowSummary] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
 
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<Date | null>(null);
@@ -187,12 +190,15 @@ const App: React.FC = () => {
   };
 
   const clearAll = () => {
-    if (confirm("Clear all planned hours and settings?")) {
-      setAdjustments({});
-      setGoal('');
-      setStartDateStr('');
-      setExcludedDays([0, 6]);
-    }
+    setShowResetModal(true);
+  };
+
+  const confirmReset = () => {
+    setAdjustments({});
+    setGoal('');
+    setStartDateStr('');
+    setExcludedDays([0, 6]);
+    setShowResetModal(false);
   };
 
   const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -540,6 +546,49 @@ const App: React.FC = () => {
                     );
                   })
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="p-8 text-center space-y-6">
+              <div className="mx-auto w-20 h-20 bg-gradient-to-br from-rose-100 to-orange-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-10 h-10 text-rose-500" />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black text-gray-800">Start Fresh?</h3>
+                <p className="text-sm text-gray-500 leading-relaxed">
+                  This will clear all your logged hours, settings, and progress. 
+                  <span className="block mt-1 text-rose-400 font-semibold">This action cannot be undone!</span>
+                </p>
+              </div>
+
+              <div className="bg-rose-50/50 rounded-2xl p-4 border border-rose-100">
+                <p className="text-xs text-rose-400 font-bold flex items-center justify-center gap-2">
+                  <Sparkles className="w-4 h-4" />
+                  Tip: Download a backup first!
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={() => setShowResetModal(false)} 
+                  className="flex-1 py-4 px-6 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-2xl font-black text-sm transition-all"
+                >
+                  Keep Data
+                </button>
+                <button 
+                  onClick={confirmReset} 
+                  className="flex-1 py-4 px-6 bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 text-white rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-200"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Reset All
+                </button>
               </div>
             </div>
           </div>
