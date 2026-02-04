@@ -27,7 +27,10 @@ import {
   CalendarOff,
   PenLine,
   Save,
-  BookOpen
+  BookOpen,
+  Lock,
+  Unlock,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   format, 
@@ -90,6 +93,12 @@ const App: React.FC = () => {
   const [dragMode, setDragMode] = useState<DayStatus>('work');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+  // Detect touch device on mount
+  useEffect(() => {
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  }, []);
 
   const startDate = useMemo(() => {
     if (!startDateStr) return null;
@@ -124,19 +133,34 @@ const App: React.FC = () => {
     return calculateDayHours(date, adjustments, mode, excludedDays, excludeHolidays);
   };
 
-  const getDayLog = (date: Date): string => {
+  const getDayLog = useCallback((date: Date): string => {
     const key = getDateKey(date);
     return adjustments[key]?.log || '';
-  };
+  }, [adjustments]);
 
-  // Load log when selecting a date
+  const isDayEntered = useCallback((date: Date): boolean => {
+    const key = getDateKey(date);
+    return adjustments[key]?.entered || false;
+  }, [adjustments]);
+
+  // Track which date's log we've loaded to avoid resetting on re-clicks
+  const loadedLogDateRef = useRef<string | null>(null);
+  
+  // Load log when selecting a NEW date (not when clicking the same date or when adjustments change)
   useEffect(() => {
     if (selectedDate) {
-      const existingLog = getDayLog(selectedDate);
-      setLogInput(existingLog);
-      setIsEditingLog(existingLog.length === 0);
+      const dateKey = getDateKey(selectedDate);
+      // Only load if we're selecting a different date than what's already loaded
+      if (loadedLogDateRef.current !== dateKey) {
+        const existingLog = getDayLog(selectedDate);
+        setLogInput(existingLog);
+        setIsEditingLog(existingLog.length === 0);
+        loadedLogDateRef.current = dateKey;
+      }
+    } else {
+      loadedLogDateRef.current = null;
     }
-  }, [selectedDate]);
+  }, [selectedDate]); // Intentionally not including getDayLog to prevent resets
 
   const saveLog = (date: Date) => {
     const key = getDateKey(date);
@@ -145,9 +169,21 @@ const App: React.FC = () => {
         status: getDayDisplayHours(date) > 0 ? 'work' : 'off', 
         overtime: 0 
       };
-      return { ...prev, [key]: { ...current, log: logInput.trim() || undefined } };
+      // Mark as entered when saving a log
+      return { ...prev, [key]: { ...current, log: logInput.trim() || undefined, entered: true } };
     });
     setIsEditingLog(false);
+  };
+
+  const toggleEntered = (date: Date) => {
+    const key = getDateKey(date);
+    setAdjustments(prev => {
+      const current = prev[key] || { 
+        status: getDayDisplayHours(date) > 0 ? 'work' : 'off', 
+        overtime: 0 
+      };
+      return { ...prev, [key]: { ...current, entered: !current.entered } };
+    });
   };
 
   const deleteLog = (date: Date) => {
@@ -171,6 +207,8 @@ const App: React.FC = () => {
   };
 
   const handleMouseDown = (date: Date) => {
+    // Disable drag on touch devices for better responsiveness
+    if (isTouchDevice) return;
     if (startDate && isBefore(startOfDay(date), startOfDay(startDate))) return;
     if (!startDate) return;
     // In manual mode, allow selecting any date after start; in auto mode, restrict to estimated end date
@@ -188,6 +226,7 @@ const App: React.FC = () => {
   };
 
   const handleMouseEnter = (date: Date) => {
+    if (isTouchDevice) return;
     if (!isDragging || !dragStart || !startDate) return;
     if (isBefore(startOfDay(date), startOfDay(startDate))) return;
     // In manual mode, allow selecting any date after start; in auto mode, restrict to estimated end date
@@ -209,9 +248,12 @@ const App: React.FC = () => {
     setAdjustments(prev => {
       const next = { ...prev };
       dragSelection.forEach(key => {
+        // Skip entered/locked dates - they can't be changed via drag
+        if (prev[key]?.entered) return;
         next[key] = {
           status: dragMode,
-          overtime: prev[key]?.overtime || 0
+          overtime: prev[key]?.overtime || 0,
+          log: prev[key]?.log // Preserve any existing log
         };
       });
       return next;
@@ -526,7 +568,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-7 gap-2 md:gap-3 mb-6 text-center">
+            <div className="grid grid-cols-7 gap-2 md:gap-3 mb-6 text-center" style={{ touchAction: 'manipulation' }}>
               {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(day => (<div key={day} className="text-xs font-black text-gray-300 py-2 uppercase tracking-tighter">{day}</div>))}
               {Array.from({ length: startOfMonth(viewDate).getDay() }).map((_, i) => (<div key={`empty-${i}`} className="aspect-square" />))}
               {monthDays.map(date => {
@@ -542,14 +584,15 @@ const App: React.FC = () => {
                 const inDragSelection = dragSelection.has(key);
                 const holidayInfo = isHoliday(date);
                 const isHolidayDate = holidayInfo.isHoliday && excludeHolidays;
-                const hasLog = !!adjustments[key]?.log;
+                const isEntered = adjustments[key]?.entered || false;
 
                 return (
                   <button key={date.toString()} onMouseDown={() => handleMouseDown(date)} onMouseEnter={() => handleMouseEnter(date)} onClick={() => !isDisabled && setSelectedDate(date)}
                     title={holidayInfo.isHoliday ? holidayInfo.name : undefined}
-                    className={`relative aspect-square flex flex-col items-center justify-center rounded-2xl transition-all duration-100 ${isSelected ? 'ring-[3px] ring-indigo-400 z-10 scale-105' : ''} ${inDragSelection ? (dragMode === 'work' ? 'bg-indigo-400 text-white scale-95 shadow-inner' : 'bg-gray-200 scale-95 shadow-inner') : isHolidayDate ? 'bg-purple-50 text-purple-400 border border-purple-100' : isWorkDay ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'bg-gray-50/50 text-gray-300'} ${isDisabled ? 'opacity-10 pointer-events-none' : 'hover:bg-rose-50 cursor-pointer'} ${isToday ? 'outline outline-2 outline-rose-200' : ''}`}>
+                    style={{ touchAction: 'manipulation' }}
+                    className={`relative aspect-square flex flex-col items-center justify-center rounded-2xl transition-all duration-100 ${isSelected ? 'ring-[3px] ring-indigo-400 z-10 scale-105' : ''} ${inDragSelection && !isEntered ? (dragMode === 'work' ? 'bg-indigo-400 text-white scale-95 shadow-inner' : 'bg-gray-200 scale-95 shadow-inner') : isHolidayDate ? 'bg-purple-50 text-purple-400 border border-purple-100' : isWorkDay ? 'bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100/50' : 'bg-gray-50/50 text-gray-300'} ${isDisabled ? 'opacity-10 pointer-events-none' : 'hover:bg-rose-50 cursor-pointer'} ${isToday ? 'outline outline-2 outline-rose-200' : ''}`}>
                     {holidayInfo.isHoliday && <span className="absolute top-0.5 right-0.5 text-[8px]">⭐</span>}
-                    {hasLog && !holidayInfo.isHoliday && <span className="absolute top-0.5 right-0.5 text-[8px]">📝</span>}
+                    {isEntered && !holidayInfo.isHoliday && <span className="absolute top-0.5 right-0.5 text-[8px]">📝</span>}
                     <span className="text-base font-black">{format(date, 'd')}</span>
                     {isWorkDay && !inDragSelection && (<span className="text-[10px] font-black opacity-60 leading-none mt-0.5">{hours}h</span>)}
                   </button>
@@ -570,6 +613,21 @@ const App: React.FC = () => {
                   </div>
                 )}
                 
+                {/* Entered Status - subtle indicator */}
+                {isDayEntered(selectedDate) && (
+                  <div className="mb-4 -mt-2 -mx-2 px-4 py-2 bg-gray-100 rounded-2xl flex items-center justify-between">
+                    <span className="text-xs text-gray-500 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-gray-400" /> Day marked as logged
+                    </span>
+                    <button 
+                      onClick={() => toggleEntered(selectedDate)}
+                      className="text-[10px] text-rose-400 hover:text-rose-600 flex items-center gap-1 transition-all"
+                    >
+                      <Trash2 className="w-3 h-3" /> Delete
+                    </button>
+                  </div>
+                )}
+
                 <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                   <div className="text-center md:text-left">
                     <p className="text-[10px] font-black text-indigo-400 uppercase mb-1">Customizing</p>
@@ -635,10 +693,9 @@ const App: React.FC = () => {
                         )}
                         <button
                           onClick={() => saveLog(selectedDate)}
-                          disabled={!logInput.trim()}
-                          className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all"
+                          className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all"
                         >
-                          <Save className="w-3 h-3" /> Save Log
+                          <Save className="w-3 h-3" /> Save
                         </button>
                       </div>
                     </div>
@@ -646,13 +703,23 @@ const App: React.FC = () => {
                     <div className="bg-white rounded-2xl p-4 border border-indigo-100">
                       <p className="text-sm text-gray-700 whitespace-pre-wrap">{getDayLog(selectedDate)}</p>
                     </div>
+                  ) : !isDayEntered(selectedDate) ? (
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => setIsEditingLog(true)}
+                        className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-2xl text-sm text-indigo-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-white/50 transition-all flex items-center justify-center gap-2"
+                      >
+                        <PenLine className="w-4 h-4" /> Add a note about today...
+                      </button>
+                      <button
+                        onClick={() => toggleEntered(selectedDate)}
+                        className="w-full py-2 text-xs text-gray-400 hover:text-gray-600 transition-all flex items-center justify-center gap-1"
+                      >
+                        <CheckCircle2 className="w-3 h-3" /> Mark as logged (no note)
+                      </button>
+                    </div>
                   ) : (
-                    <button
-                      onClick={() => setIsEditingLog(true)}
-                      className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-2xl text-sm text-indigo-400 hover:border-indigo-300 hover:text-indigo-500 hover:bg-white/50 transition-all flex items-center justify-center gap-2"
-                    >
-                      <PenLine className="w-4 h-4" /> Add a note about today...
-                    </button>
+                    <p className="text-sm text-gray-400 italic text-center py-2">No note added.</p>
                   )}
                 </div>
               </div>
@@ -662,7 +729,7 @@ const App: React.FC = () => {
               <div className="flex items-center gap-2"><div className="w-3.5 h-3.5 bg-indigo-100 rounded-md"></div> Scheduled</div>
               <div className="flex items-center gap-2"><div className="w-3.5 h-3.5 bg-white border-2 border-rose-200 rounded-md"></div> Today</div>
               <div className="flex items-center gap-2"><div className="w-3.5 h-3.5 bg-purple-50 border border-purple-100 rounded-md flex items-center justify-center text-[6px]">⭐</div> Holiday</div>
-              <div className="flex items-center gap-2"><div className="w-3.5 h-3.5 bg-indigo-50 border border-indigo-100 rounded-md flex items-center justify-center text-[6px]">📝</div> Has Log</div>
+              <div className="flex items-center gap-2"><div className="w-3.5 h-3.5 bg-indigo-50 rounded-md flex items-center justify-center text-[6px]">📝</div> Logged</div>
               <div className="flex items-center gap-2"><div className="w-3.5 h-3.5 bg-gray-50 rounded-md"></div> Off</div>
             </div>
           </section>

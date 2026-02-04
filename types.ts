@@ -6,6 +6,7 @@ export interface DayAdjustment {
   status: DayStatus;
   overtime: number;
   log?: string; // Optional daily log/diary entry
+  entered?: boolean; // Marks the day as officially logged/entered (locks it)
 }
 
 export interface DayMap {
