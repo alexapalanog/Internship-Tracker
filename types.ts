@@ -5,6 +5,7 @@ export type PlanningMode = 'manual' | 'automatic';
 export interface DayAdjustment {
   status: DayStatus;
   overtime: number;
+  log?: string; // Optional daily log/diary entry
 }
 
 export interface DayMap {

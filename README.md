@@ -1,16 +1,39 @@
-# Internship Planner
+# Internship Tracker
 
-Simple website for interns who want to keep track of their hours and days progress. It helps you see how much you've worked, plan your schedule, and know when your internship will end.
+**Internship Tracker** is a simple web-based tool designed for interns who want to **track their internship progress with clarity and ease**. It helps you monitor completed hours, manage workdays and absences, plan schedules, log daily activities, and estimate when your internship will officially end.
 
-## As an Intern What You Can Do
+---
 
-- **Enter Required Hours**: Put in the total hours you need to complete.
-- **Auto Log Dynamic Calendar**: Select your date schedule, hours worked, and progress at a glance.
-- **Manual Log**: Select your date accomplished real-time to know progress.
-- **Log Absences & Day Off**: Keep track of days you didn't or won't work.
-- **Add Overtime**: Record extra hours you worked.
-- **Generate Summary**: Get a report showing your total hours, absences, overtime, and estimated end date.
-- **Download and Upload Back-up Data**: You are able to log and download progress and upload data to retain saved changes.
+## What You Can Do as an Intern
+
+- **Set Required Hours**  
+  Input the total number of internship hours you are required to complete.
+
+- **Auto-Log via Dynamic Calendar**  
+  Select your work dates and hours using an interactive calendar to instantly view your progress.
+
+- **Manual Time Logging**  
+  Record accomplished workdays and hours in real time for flexible tracking.
+
+- **Track Absences & Days Off**  
+  Keep a record of days you did not or will not work.
+
+- **Add Overtime Hours**  
+  Log extra hours worked beyond your regular schedule.
+
+- **Internship Diary (Per Day)**  
+  Write daily notes on what you accomplished or learned.
+
+- **Generate Progress Summary**  
+  Get a complete report of total hours, absences, overtime, diary entries, and your estimated internship end date.
+
+- **Backup & Restore Data**  
+  Download your progress as a backup file and upload it later to restore saved data.
+
+- **Holiday Management**  
+  Exclude Philippine holidays as non-working days. Reference: [Globe Philippines Holiday List](https://www.globe.com.ph/blog/official-list-holidays-philippines)
+
+---
 
 ## Run Locally
 

@@ -4,6 +4,39 @@ import { DayMap, DayStatus, PlanningMode } from './types';
 
 export const getDateKey = (date: Date): string => format(date, 'yyyy-MM-dd');
 
+// Philippine 2026 Holidays
+export const PH_HOLIDAYS_2026: { date: string; name: string; type: 'regular' | 'special' }[] = [
+  // Regular Holidays
+  { date: '2026-01-01', name: "New Year's Day", type: 'regular' },
+  { date: '2026-04-02', name: 'Maundy Thursday', type: 'regular' },
+  { date: '2026-04-03', name: 'Good Friday', type: 'regular' },
+  { date: '2026-04-09', name: 'Day of Valor (Araw ng Kagitingan)', type: 'regular' },
+  { date: '2026-05-01', name: 'Labor Day', type: 'regular' },
+  { date: '2026-06-12', name: 'Independence Day', type: 'regular' },
+  { date: '2026-08-31', name: 'National Heroes Day', type: 'regular' },
+  { date: '2026-11-30', name: 'Bonifacio Day', type: 'regular' },
+  { date: '2026-12-25', name: 'Christmas Day', type: 'regular' },
+  { date: '2026-12-30', name: 'Rizal Day', type: 'regular' },
+  // Special Non-Working Holidays
+  { date: '2026-02-17', name: 'Chinese New Year', type: 'special' },
+  { date: '2026-04-04', name: 'Black Saturday', type: 'special' },
+  { date: '2026-08-21', name: 'Ninoy Aquino Day', type: 'special' },
+  { date: '2026-11-01', name: "All Saints' Day", type: 'special' },
+  { date: '2026-11-02', name: "All Souls' Day", type: 'special' },
+  { date: '2026-12-08', name: 'Feast of the Immaculate Conception of Mary', type: 'special' },
+  { date: '2026-12-24', name: 'Christmas Eve', type: 'special' },
+  { date: '2026-12-31', name: 'Last Day of the Year', type: 'special' },
+];
+
+export const isHoliday = (date: Date): { isHoliday: boolean; name?: string; type?: 'regular' | 'special' } => {
+  const key = getDateKey(date);
+  const holiday = PH_HOLIDAYS_2026.find(h => h.date === key);
+  if (holiday) {
+    return { isHoliday: true, name: holiday.name, type: holiday.type };
+  }
+  return { isHoliday: false };
+};
+
 /**
  * Calculates hours for a specific day.
  * Respects manual adjustments first, then checks if the day is excluded in the weekly schedule.
@@ -12,7 +45,8 @@ export const calculateDayHours = (
   date: Date, 
   adjustments: DayMap, 
   mode: PlanningMode,
-  excludedDays: number[] // Array of days (0-6) that are marked as OFF
+  excludedDays: number[], // Array of days (0-6) that are marked as OFF
+  excludeHolidays: boolean = false
 ): number => {
   const key = getDateKey(date);
   const adj = adjustments[key];
@@ -21,6 +55,11 @@ export const calculateDayHours = (
   if (adj) {
     if (adj.status === 'off') return 0;
     return 8 + adj.overtime;
+  }
+
+  // Check if it's a holiday and holidays are excluded
+  if (excludeHolidays && isHoliday(date).isHoliday) {
+    return 0;
   }
 
   if (mode === 'automatic') {
@@ -40,7 +79,8 @@ export const getInternshipStats = (
   startDate: Date | null,
   adjustments: DayMap,
   mode: PlanningMode,
-  excludedDays: number[]
+  excludedDays: number[],
+  excludeHolidays: boolean = false
 ) => {
   if (!startDate || !isValid(startDate)) {
     return {
@@ -69,7 +109,7 @@ export const getInternshipStats = (
   while (daysProcessed < safetyLimit) {
     const key = getDateKey(checkDate);
     const hasManual = !!adjustments[key];
-    const hours = calculateDayHours(checkDate, adjustments, mode, excludedDays);
+    const hours = calculateDayHours(checkDate, adjustments, mode, excludedDays, excludeHolidays);
 
     if (hours > 0) {
       // In manual mode, always accumulate hours; in auto mode, only until goal
