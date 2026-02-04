@@ -556,20 +556,20 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-sm rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
             <div className="p-8 text-center space-y-6">
-              <div className="mx-auto w-20 h-20 bg-gradient-to-br from-rose-100 to-orange-100 rounded-full flex items-center justify-center">
-                <AlertTriangle className="w-10 h-10 text-rose-500" />
+              <div className="mx-auto w-20 h-20 bg-gradient-to-br from-purple-100 to-violet-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-10 h-10 text-purple-500" />
               </div>
               
               <div className="space-y-2">
                 <h3 className="text-2xl font-black text-gray-800">Start Fresh?</h3>
                 <p className="text-sm text-gray-500 leading-relaxed">
                   This will clear all your logged hours, settings, and progress. 
-                  <span className="block mt-1 text-rose-400 font-semibold">This action cannot be undone!</span>
+                  <span className="block mt-1 text-purple-500 font-semibold">This action cannot be undone!</span>
                 </p>
               </div>
 
-              <div className="bg-rose-50/50 rounded-2xl p-4 border border-rose-100">
-                <p className="text-xs text-rose-400 font-bold flex items-center justify-center gap-2">
+              <div className="bg-purple-50/50 rounded-2xl p-4 border border-purple-100">
+                <p className="text-xs text-purple-500 font-bold flex items-center justify-center gap-2">
                   <Sparkles className="w-4 h-4" />
                   Tip: Download a backup first!
                 </p>
@@ -584,10 +584,12 @@ const App: React.FC = () => {
                 </button>
                 <button 
                   onClick={confirmReset} 
-                  className="flex-1 py-4 px-6 bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 text-white rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-200"
+                  className="flex-1 py-4 px-6 bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700 text-white rounded-2xl font-black text-sm transition-all shadow-lg shadow-purple-200"
                 >
-                  <Trash2 className="w-4 h-4" />
-                  Reset All
+                  <span className="flex items-center justify-center gap-2">
+                    <Trash2 className="w-4 h-4" />
+                    Reset All
+                  </span>
                 </button>
               </div>
             </div>
