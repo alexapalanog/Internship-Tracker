@@ -171,12 +171,18 @@ export const getInternshipStats = (
   };
 };
 
-export const generateCSV = (workDays: { date: Date; hours: number }[]): string => {
-  const header = 'Date,Day,Hours,Status\n';
+export const generateCSV = (workDays: { date: Date; hours: number }[], adjustments: DayMap = {}): string => {
+  const header = 'Date,Day,Hours,Status,Daily Log\n';
   const rows = workDays.map(wd => {
     const dateStr = format(wd.date, 'yyyy-MM-dd');
     const dayName = format(wd.date, 'EEEE');
-    return `${dateStr},${dayName},${wd.hours},Work`;
+    const key = getDateKey(wd.date);
+    const log = adjustments[key]?.log || '';
+    // Escape quotes and wrap in quotes if contains comma or newline
+    const escapedLog = log.includes(',') || log.includes('\n') || log.includes('"') 
+      ? `"${log.replace(/"/g, '""')}"`
+      : log;
+    return `${dateStr},${dayName},${wd.hours},Work,${escapedLog}`;
   }).join('\n');
   return header + rows;
 };

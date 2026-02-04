@@ -27,6 +27,9 @@
 - **Generate Progress Summary**  
   Get a complete report of total hours, absences, overtime, diary entries, and your estimated internship end date.
 
+- **Export as PDF or CSV**  
+  Download your internship report as a PDF document or CSV spreadsheet, including daily logs.
+
 - **Backup & Restore Data**  
   Download your progress as a backup file and upload it later to restore saved data.
 

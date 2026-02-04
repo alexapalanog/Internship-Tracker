@@ -327,22 +327,37 @@ const App: React.FC = () => {
     doc.text("Schedule Details", 20, 105);
     
     let y = 115;
-    stats.workDays.slice(0, 40).forEach((wd) => {
-      if (y > 270) {
+    stats.workDays.forEach((wd) => {
+      if (y > 260) {
         doc.addPage();
         y = 20;
       }
+      const key = getDateKey(wd.date);
+      const log = adjustments[key]?.log || '';
+      
       doc.setFontSize(10);
+      doc.setTextColor(31, 41, 55);
       doc.text(`${format(wd.date, 'yyyy-MM-dd')} (${format(wd.date, 'EEE')})`, 25, y);
       doc.text(`${wd.hours} hours`, 100, y);
-      y += 7;
-    });
-
-    if (stats.workDays.length > 40) {
+      y += 6;
+      
+      if (log) {
         doc.setFontSize(8);
-        doc.setTextColor(156, 163, 175);
-        doc.text(`... and ${stats.workDays.length - 40} more days. See CSV for full list.`, 25, y);
-    }
+        doc.setTextColor(107, 114, 128); // Gray-500
+        // Split long logs into multiple lines
+        const maxWidth = 160;
+        const lines = doc.splitTextToSize(`Log: ${log}`, maxWidth);
+        lines.forEach((line: string) => {
+          if (y > 280) {
+            doc.addPage();
+            y = 20;
+          }
+          doc.text(line, 30, y);
+          y += 4;
+        });
+        y += 2;
+      }
+    });
 
     doc.save(`internship-report-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
@@ -668,12 +683,12 @@ const App: React.FC = () => {
                   <p className="text-lg font-black mb-1">Download Your Schedule</p>
                   <p className="text-xs opacity-80 font-medium">Export in the format that works best for you.</p>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
                   <button onClick={generatePDFReport} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group">
                     <FileText className="w-6 h-6" />
                     <span className="text-[10px] font-black uppercase">PDF Version</span>
                   </button>
-                  <button onClick={() => downloadFile(generateCSV(stats.workDays), `internship-report.csv`, 'text/csv')} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group">
+                  <button onClick={() => downloadFile(generateCSV(stats.workDays, adjustments), `internship-report.csv`, 'text/csv')} className="flex flex-col items-center justify-center gap-2 p-4 bg-white/10 hover:bg-white/30 border border-white/20 rounded-2xl transition-all active:scale-95 group">
                     <Table className="w-6 h-6" />
                     <span className="text-[10px] font-black uppercase">CSV Table</span>
                   </button>
