@@ -79,6 +79,10 @@ const App: React.FC = () => {
     const saved = localStorage.getItem(STORAGE_KEY);
     return saved ? JSON.parse(saved).excludeHolidays ?? true : true;
   });
+  const [hoursPerDay, setHoursPerDay] = useState<number>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved).hoursPerDay ?? 8 : 8;
+  });
 
   const [viewDate, setViewDate] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -107,11 +111,11 @@ const App: React.FC = () => {
   }, [startDateStr]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ goal, startDateStr, adjustments, mode, excludedDays, excludeHolidays }));
-  }, [goal, startDateStr, adjustments, mode, excludedDays, excludeHolidays]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ goal, startDateStr, adjustments, mode, excludedDays, excludeHolidays, hoursPerDay }));
+  }, [goal, startDateStr, adjustments, mode, excludedDays, excludeHolidays, hoursPerDay]);
 
   const numericGoal = typeof goal === 'number' ? goal : 0;
-  const stats = useMemo(() => getInternshipStats(numericGoal, startDate, adjustments, mode, excludedDays, excludeHolidays), [numericGoal, startDate, adjustments, mode, excludedDays, excludeHolidays]);
+  const stats = useMemo(() => getInternshipStats(numericGoal, startDate, adjustments, mode, excludedDays, excludeHolidays, hoursPerDay), [numericGoal, startDate, adjustments, mode, excludedDays, excludeHolidays, hoursPerDay]);
 
   const groupedWorkDays = useMemo(() => {
     const groups: { [month: string]: { date: Date; hours: number }[] } = {};
@@ -130,7 +134,7 @@ const App: React.FC = () => {
   }, [viewDate]);
 
   const getDayDisplayHours = (date: Date) => {
-    return calculateDayHours(date, adjustments, mode, excludedDays, excludeHolidays);
+    return calculateDayHours(date, adjustments, mode, excludedDays, excludeHolidays, hoursPerDay);
   };
 
   const getDayLog = useCallback((date: Date): string => {
@@ -291,6 +295,7 @@ const App: React.FC = () => {
     setStartDateStr('');
     setExcludedDays([0, 6]);
     setExcludeHolidays(true);
+    setHoursPerDay(8);
     setShowResetModal(false);
   };
 
@@ -328,6 +333,7 @@ const App: React.FC = () => {
         setMode(data.mode);
         setExcludedDays(data.excludedDays);
         setExcludeHolidays(data.excludeHolidays ?? true);
+        setHoursPerDay(data.hoursPerDay ?? 8);
 
         alert('✅ Backup restored successfully!');
       } catch (error) {
@@ -451,6 +457,26 @@ const App: React.FC = () => {
                   onChange={(e) => setStartDateStr(e.target.value)} 
                   className="w-full bg-rose-50/50 border border-rose-100 rounded-2xl px-4 sm:px-5 py-3 sm:py-4 focus:ring-2 focus:ring-rose-200 focus:outline-none font-bold text-gray-700 text-sm sm:text-base [&::-webkit-calendar-picker-indicator]:cursor-pointer" 
                 />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2">Hours Per Day</label>
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="12" 
+                    value={hoursPerDay} 
+                    onChange={(e) => setHoursPerDay(Number(e.target.value))} 
+                    className="flex-1 h-2 bg-rose-100 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-indigo-500 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md" 
+                  />
+                  <div className="bg-indigo-500 text-white px-3 py-2 rounded-xl font-bold text-sm min-w-[60px] text-center">
+                    {hoursPerDay}h
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2 italic flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Default work hours per day (excludes overtime)
+                </p>
               </div>
 
               <div>

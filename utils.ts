@@ -46,7 +46,8 @@ export const calculateDayHours = (
   adjustments: DayMap, 
   mode: PlanningMode,
   excludedDays: number[], // Array of days (0-6) that are marked as OFF
-  excludeHolidays: boolean = false
+  excludeHolidays: boolean = false,
+  hoursPerDay: number = 8
 ): number => {
   const key = getDateKey(date);
   const adj = adjustments[key];
@@ -54,7 +55,7 @@ export const calculateDayHours = (
   // Manual adjustments always take priority
   if (adj) {
     if (adj.status === 'off') return 0;
-    return 8 + adj.overtime;
+    return hoursPerDay + adj.overtime;
   }
 
   // Check if it's a holiday and holidays are excluded
@@ -68,7 +69,7 @@ export const calculateDayHours = (
     if (excludedDays.includes(dayOfWeek)) {
       return 0;
     }
-    return isWeekend(date) ? 0 : 8;
+    return isWeekend(date) ? 0 : hoursPerDay;
   }
 
   return 0;
@@ -80,7 +81,8 @@ export const getInternshipStats = (
   adjustments: DayMap,
   mode: PlanningMode,
   excludedDays: number[],
-  excludeHolidays: boolean = false
+  excludeHolidays: boolean = false,
+  hoursPerDay: number = 8
 ) => {
   if (!startDate || !isValid(startDate)) {
     return {
@@ -109,7 +111,7 @@ export const getInternshipStats = (
   while (daysProcessed < safetyLimit) {
     const key = getDateKey(checkDate);
     const hasManual = !!adjustments[key];
-    const hours = calculateDayHours(checkDate, adjustments, mode, excludedDays, excludeHolidays);
+    const hours = calculateDayHours(checkDate, adjustments, mode, excludedDays, excludeHolidays, hoursPerDay);
 
     if (hours > 0) {
       // In manual mode, always accumulate hours; in auto mode, only until goal
